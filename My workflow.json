@@ -1,0 +1,314 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Hospital KPI Report",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "ExcelFile",
+              "fieldType": "file",
+              "acceptFileTypes": ".xlsx"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        -1696,
+        48
+      ],
+      "id": "f08107e7-e1df-411f-84d9-30c5d7cc66cb",
+      "name": "On form submission",
+      "webhookId": "f33743ec-a1b3-433a-8582-3520e5597880"
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "binaryPropertyName": "ExcelFile",
+        "options": {
+          "sheetName": "KPI_Export"
+        }
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -1472,
+        48
+      ],
+      "id": "e967cbc5-dd11-4567-bfc8-0bb4ca77f5c3",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "338eda7b-a99b-4eba-a25e-7a6ccf98faac",
+              "name": "question",
+              "value": "Do hospitals differ in cost per day of stay?",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -1248,
+        48
+      ],
+      "id": "a1f0df52-c2f8-4f22-b84f-db6b6511838e",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analytical question: {{ $json.question }}\n\nKPI data:\n{{ JSON.stringify($json, null, 2) }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "=You are a report writer. Write in English, using Western digits (0-9) only.\nRules:\n- Use ONLY the numbers provided. Never calculate, round, estimate or invent a value.\n- Copy each number exactly as given.\n- Report every provided KPI; do not decide what is important.\n- State the significance verdict exactly as provided. Do not strengthen or weaken it.\n- Do not use numbered lists. Plain paragraphs and short bullets only.\n- Structure: Summary, Key Metrics, Main Finding, Practical Implication.\n- Maximum 200 words."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -928,
+        32
+      ],
+      "id": "3862f0a7-37f2-42ef-8436-f98ce0f81c78",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "options": {
+          "maxTokens": 1500,
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -928,
+        208
+      ],
+      "id": "4ba1fe8a-78a0-4629-80cf-250bd8e33461",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "aWHql51CmRumMh1t",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const report = $input.first().json.text || \"\";\nconst data = $('Edit Fields').first().json;\n\n// استخراج اعداد مجاز از ورودی اکسل\nconst allowed = Object.entries(data)\n  .filter(([k, v]) => k !== 'question' && v !== '' && v !== null && !isNaN(Number(v)))\n  .map(([k, v]) => Number(v));\n\n// استخراج تمام اعداد موجود در متن گزارش\nconst found = (report.replace(/,/g, '').match(/\\d+(\\.\\d+)?/g) || []).map(Number);\n\n// پیدا کردن اعدادی که در گزارش آمده اما در اکسل نبوده\nconst extra = found.filter(n => !allowed.some(a => Math.abs(a - n) < 0.01));\n\n// پیدا کردن اعدادی که در اکسل بوده اما در گزارش ذکر نشده\nconst missing = allowed.filter(a => !found.some(n => Math.abs(a - n) < 0.01));\n\nreturn [{\n  json: {\n    report,\n    valid: extra.length === 0 && missing.length === 0,\n    extra,\n    missing\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        32
+      ],
+      "id": "f4ed1ec6-64cf-499d-8f7d-d61f58f269a0",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "7a966da6-aa4c-4f84-b525-86279052d334",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -336,
+        32
+      ],
+      "id": "c062c65e-2f5d-4493-a739-f9a25eceb46c",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "sendTo": "samyarmosayebii@gmail.com",
+        "subject": "Hospital Cost KPI Report",
+        "emailType": "text",
+        "message": "={{ $json.report }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -64,
+        -96
+      ],
+      "id": "4c2cb443-a287-4878-a4dd-f049b74cb992",
+      "name": "Send a message",
+      "webhookId": "6531353a-1fb0-4a34-a197-04efa40a4fd7",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "JyBmcbvTuFppqBbq",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "samyarmosayebii@gmail.com",
+        "subject": "REPORT FAILED VALIDATION",
+        "emailType": "text",
+        "message": "=Extra numbers: {{ JSON.stringify($json.extra) }} Missing numbers: {{ JSON.stringify($json.missing) }}  Generated Report: {{ $json.report }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -64,
+        272
+      ],
+      "id": "7890b3f0-6528-4319-b624-d2f8591862df",
+      "name": "Send a message1",
+      "webhookId": "d61e2b51-f235-46fc-816a-d2e3846367a4",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "JyBmcbvTuFppqBbq",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "aabec7bf-c4dd-4fec-b9c6-daf4564104fe",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b1453eb5740628a766b1b947e82b0d25622526047e870bbb941528d2c04506b2"
+  },
+  "nodeGroups": [],
+  "id": "ODJCqM8EFWHxCvUP",
+  "tags": []
+}
